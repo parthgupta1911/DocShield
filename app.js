@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const app = express();
 const userRouter = require("./routes/userRouter");
+const documentRouter = require("./routes/documentRouter");
 
 app.use(express.json());
 require("dotenv").config();
@@ -14,6 +15,8 @@ mongoose.connect(uri).then(() => {
   console.log(`connected to the database`);
 });
 app.use("/api/teacher", userRouter);
+app.use("/api/document", documentRouter);
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

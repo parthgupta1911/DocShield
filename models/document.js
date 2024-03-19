@@ -16,10 +16,15 @@ const DocumentSchema = new Schema({
     type: String,
     required: true,
   },
+  documentType: {
+    type: String,
+    required: true,
+    enum: ["marks", "attendance", "etc"], // Define acceptable types here
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
 
-module.exports = mongoose.model("Document", encryptedDocumentSchema);
+module.exports = mongoose.model("Document", DocumentSchema);

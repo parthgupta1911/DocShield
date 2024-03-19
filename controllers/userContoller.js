@@ -128,7 +128,7 @@ exports.login = async (req, res) => {
       }
       return res
         .status(200)
-        .json({ message: "Login successful", firstLogin: false });
+        .json({ message: "Login successful", id: user._id });
     }
   } catch (error) {
     return res
@@ -139,7 +139,6 @@ exports.login = async (req, res) => {
 
 exports.changePassword = async (req, res) => {
   try {
-    console.log(req.body);
     const { email, oldPassword, newPassword, signature, message } = req.body;
 
     const user = await User.findOne({ email });
