@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
-const EC = require("elliptic");
+const EC = require("elliptic").ec;
+const ec = new EC("secp256k1");
 const User = require("../models/user");
 const { sendMail } = require("./../utils/sendemail");
 
@@ -11,7 +12,6 @@ exports.eccAuthMiddleware = async (req, res, next) => {
     if (!admin) {
       return res.status(401).json({ message: "Admin not found" });
     }
-    const ec = new EC.ec("secp256k1");
     const key = ec.keyFromPublic(admin.publicKey, "hex");
     const validSignature = key.verify(message, signature);
 
@@ -36,7 +36,6 @@ exports.addTeacher = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const ec = new EC.ec("secp256k1");
     const keyPair = ec.genKeyPair();
     const publicKey = keyPair.getPublic("hex");
     const privateKey = keyPair.getPrivate("hex"); // Storing or handling private keys needs caution
@@ -87,15 +86,11 @@ exports.signRequestMiddleware = (req, res, next) => {
         .json({ message: "Missing privateKey or message in the request body" });
     }
 
-    const ec = new EC.ec("secp256k1");
     const keyPair = ec.keyFromPrivate(req.body.privateKey);
-
     const signatureObject = keyPair.sign(req.body.message);
     const signature = signatureObject.toDER("hex");
 
     req.body.signature = signature;
-
-    delete req.body.privateKey;
 
     next();
   } catch (error) {
@@ -114,7 +109,6 @@ exports.login = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const ec = new EC.ec("secp256k1");
     const key = ec.keyFromPublic(user.publicKey, "hex");
     const validSignature = key.verify(message, signature);
 
@@ -153,7 +147,6 @@ exports.changePassword = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const ec = new EC.ec("secp256k1");
     const key = ec.keyFromPublic(user.publicKey, "hex");
     const validSignature = key.verify(message, signature);
 
