@@ -1,3 +1,8 @@
+const fs = require("fs");
+const { promisify } = require("util");
+const bcrypt = require("bcrypt");
+const pdfkit = require("pdfkit");
+const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
 const mailerConfig = {

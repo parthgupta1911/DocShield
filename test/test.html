@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Text Extractor</title>
+  </head>
+  <body>
+    <input type="file" id="pdfFileInput" accept=".pdf" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script>
+      document
+        .getElementById("pdfFileInput")
+        .addEventListener("change", handleFileSelect, false);
+
+      function handleFileSelect(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function (event) {
+          const typedarray = new Uint8Array(event.target.result);
+          const pdfjsLib = window["pdfjs-dist/build/pdf"];
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+
+          pdfjsLib
+            .getDocument(typedarray)
+            .promise.then(function (pdf) {
+              const numPages = pdf.numPages;
+              let text = "";
+
+              for (let i = 1; i <= numPages; i++) {
+                pdf.getPage(i).then(function (page) {
+                  page.getTextContent().then(function (content) {
+                    const pageText = content.items
+                      .map((item) => item.str)
+                      .join("\n");
+                    text += pageText + "\n";
+                    if (i === numPages) {
+                      alert("PDF content:\n" + text);
+                    }
+                  });
+                });
+              }
+            })
+            .catch(function (error) {
+              alert("Error reading PDF: " + error.message);
+            });
+        };
+
+        reader.onerror = function (event) {
+          alert("Error reading file: " + reader.error.message);
+        };
+
+        reader.readAsArrayBuffer(file);
+      }
+    </script>
+  </body>
+</html>

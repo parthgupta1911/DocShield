@@ -1,12 +1,17 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const cors = require("cors");
+const multer = require("multer");
+const upload = multer();
+
 require("dotenv").config();
 
 const app = express();
 const userRouter = require("./routes/userRouter");
 const documentRouter = require("./routes/documentRouter");
-
+app.use(cors());
 app.use(express.json());
+app.use(upload.any());
 require("dotenv").config();
 
 const uri = process.env.URI.replace("<password>", process.env.PASSWORD);
