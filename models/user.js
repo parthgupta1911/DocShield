@@ -7,14 +7,14 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    unique: [true, "email already in use"],
+    unique: true,
     lowercase: true,
-    required: [true, "must have email"],
+    required: true,
   },
   regno: {
     type: Number,
-    unique: [true, "registration number already in use"],
-    required: [true, "must have registration number"],
+    unique: true,
+    required: true,
   },
   photo: {
     type: String,
@@ -26,7 +26,7 @@ const userSchema = new mongoose.Schema({
   },
   passwordChanged: {
     type: Boolean,
-    default: false, // Default value set to false for passwordChanged
+    default: false,
   },
   role: {
     type: String,
@@ -47,25 +47,20 @@ const userSchema = new mongoose.Schema({
   },
   firstLogin: {
     type: Boolean,
-    default: true, // Default value set to true for first login
+    default: true,
+  },
+  active: {
+    type: Boolean,
+    default: false,
   },
   subjectsTaught: [
     {
-      name: {
-        type: String,
-        required: true,
-      },
-      students: [
-        {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Student",
-        },
-      ],
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subject",
     },
   ],
 });
-//userSchema.index({ verified: 1, verificationCodeExpires: 1 });
 
-const User = mongoose.model("Users", userSchema);
+const User = mongoose.model("User", userSchema);
 
 module.exports = User;

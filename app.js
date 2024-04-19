@@ -9,6 +9,7 @@ require("dotenv").config();
 const app = express();
 const userRouter = require("./routes/userRouter");
 const documentRouter = require("./routes/documentRouter");
+const adminRouter = require("./routes/admin.js");
 app.use(cors());
 app.use(express.json());
 app.use(upload.any());
@@ -20,6 +21,7 @@ mongoose.connect(uri).then(() => {
   console.log(`connected to the database`);
 });
 app.use("/api/teacher", userRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/document", documentRouter);
 
 const PORT = process.env.PORT || 5000;

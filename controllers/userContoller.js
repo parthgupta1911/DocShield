@@ -1,11 +1,59 @@
 const bcrypt = require("bcryptjs");
 const EC = require("elliptic").ec;
 const ec = new EC("secp256k1");
-const User = require("../models/user");
-const { sendMail } = require("./../utils/sendemail");
-const Student = require("../models/students");
 const pdfkit = require("pdfkit");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const Subject = require("./../models/Subject");
+const User = require("../models/user");
+const Student = require("../models/students");
+const { sendMail } = require("./../utils/sendemail");
+
+exports.getStudents = async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.myemail });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    if (user.role === "admin") {
+      let students = await Student.find();
+      for (let i = 0; i < students.length; i++) {
+        let subjects = [];
+        for (let j = 0; j < students[i].subjects.length; j++) {
+          const subject = await Subject.findById(students[i].subjects[j]._id);
+          if (subject) {
+            const teacher = await User.findById(subject.teacher);
+            if (teacher) {
+              subjects.push({
+                subject: subject.name,
+                teacher: {
+                  regno: teacher.regno,
+                  email: teacher.email,
+                  name: teacher.name,
+                },
+                attendance: students[i].subjects[j].attendance,
+                totalattendance: students[i].subjects[j].totalattendance,
+                marks: students[i].subjects[j].marks,
+                totalmarks: students[i].subjects[j].totalmarks,
+              });
+            }
+          }
+        }
+
+        students[i].subjects = subjects;
+      }
+
+      return res.status(200).json({ students });
+    } else {
+      return res
+        .status(400)
+        .json({ message: "you do not have access to this route" });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 exports.createMultipleStudents = async (req, res, next) => {
   try {
@@ -63,7 +111,7 @@ exports.eccuser = async (req, res, next) => {
   try {
     const { signature, message } = req.body;
 
-    const user = await User.findOne({ email: req.body.email });
+    const user = await User.findOne({ email: req.body.myemail });
     if (!user) {
       return res.status(401).json({ message: "no such user" });
     }
@@ -71,7 +119,7 @@ exports.eccuser = async (req, res, next) => {
     const validSignature = key.verify(message, signature);
 
     if (!validSignature) {
-      return res.status(401).json({ message: "Invalid digital signature" });
+      return res.status(401).json({ message: "Invalid digital certificate" });
     }
     next();
   } catch (error) {
@@ -82,27 +130,96 @@ exports.eccuser = async (req, res, next) => {
 };
 exports.addsubj = async (req, res) => {
   try {
-    const { teacherEmail, subjectName, studentsEnrollmentNumbers } = req.body;
-    const teacher = await User.findOne({ email: teacherEmail });
-
+    const { regno, subjectName, studentsEnrollmentNumbers } = req.body;
+    const teacher = await User.findOne({ regno });
     if (!teacher) {
       return res.status(404).json({ error: "Teacher not found" });
     }
-    const students = await Student.find({
-      enrollmentNumber: { $in: studentsEnrollmentNumbers },
-    });
-    if (students.length !== studentsEnrollmentNumbers.length) {
-      return res.status(404).json({ error: "One or more students not found" });
-    }
-    const subjectObject = {
+    const existingSubject = await Subject.findOne({
       name: subjectName,
-      students: students.map((student) => student._id),
-    };
-    teacher.subjectsTaught.push(subjectObject);
-    await teacher.save();
-    res.status(200).json({ message: "Subject taught added successfully" });
+      teacher: teacher._id,
+    });
+
+    if (existingSubject) {
+      for (const enrollmentNumber of studentsEnrollmentNumbers) {
+        const student = await Student.findOne({ enrollmentNumber });
+        if (student && !existingSubject.students.includes(student._id)) {
+          student.subjects.push(existingSubject._id);
+          await student.save();
+          existingSubject.students.push(student._id);
+        }
+      }
+      await existingSubject.save();
+    } else {
+      const students = await Student.find({
+        enrollmentNumber: { $in: studentsEnrollmentNumbers },
+      });
+
+      const subject = new Subject({
+        name: subjectName,
+        teacher: teacher._id,
+        students: students.map((student) => student._id),
+      });
+
+      await subject.save();
+
+      for (const student of students) {
+        student.subjects.push(subject._id);
+        await student.save();
+      }
+
+      teacher.subjectsTaught.push(subject._id);
+      await teacher.save();
+    }
+
+    res.status(200).json({ message: "Subject allotted successfully" });
   } catch (error) {
     console.error("Error adding subject taught:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+exports.check = async (req, res, next) => {
+  try {
+    const { myemail } = req.body;
+    const user = await User.findOne({ email: myemail });
+    if (myemail != req.body.pdf.email) {
+      return res
+        .status(403)
+        .json({ error: "Do'nt use anyone elses digital certificate" });
+    }
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.active) {
+      next();
+    } else {
+      return res.status(403).json({
+        error:
+          "user is not active please activate your account by contacting admin",
+      });
+    }
+  } catch (error) {
+    console.error("Error checking password and login status:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+exports.check2 = async (req, res, next) => {
+  try {
+    const { myemail } = req.body;
+    const user = await User.findOne({ email: myemail });
+    if (myemail != req.body.pdf.email) {
+      return res
+        .status(403)
+        .json({ error: "Do'nt use anyone elses digital certificate" });
+    }
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking password and login status:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -153,7 +270,6 @@ exports.addTeacher = async (req, res) => {
       .json({ message: "Failed to add teacher", error: error.message });
   }
 };
-
 exports.signRequestMiddleware = (req, res, next) => {
   try {
     if (!req.body.privateKey || !req.body.message) {
@@ -185,12 +301,11 @@ function decryptdata(encryptedData, key, iv) {
   const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
   return decipher.update(encryptedData, "hex", "utf8") + decipher.final("utf8");
 }
-
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { myemail, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: myemail });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -214,10 +329,10 @@ exports.login = async (req, res) => {
         .update(privateKey)
         .digest("hex")
         .substring(0, 16);
-      console.log(privateKey + "\n");
+
       const encryptedPrivateKey = encryptData(privateKey, encryptionKey, iv);
       await User.updateOne(
-        { email },
+        { email: myemail },
         { encKey: encryptionKey, publicKey, iv, firstLogin: false }
       );
 
@@ -237,9 +352,19 @@ exports.login = async (req, res) => {
           changePasswordUrl: "/api/teacher/change-password",
         });
       }
+      if (user.active == false) {
+        return res.status(401).json({
+          message:
+            "your account has been deactivated, Please contact admin for help",
+        });
+      }
+      const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
+
       return res
         .status(200)
-        .json({ message: "Login successful", id: user._id });
+        .json({ message: "Login successful", email: user.email, token });
     }
   } catch (error) {
     return res
@@ -247,25 +372,52 @@ exports.login = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
+exports.authjwt = (req, res, next) => {
+  const token = req.body.token;
+
+  if (!token) {
+    return res
+      .status(401)
+      .json({ message: "Authentication token is required" });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ err, message: "Invalid or expired token" });
+    }
+
+    req.body.myemail = decoded.email;
+    next();
+  });
+};
 exports.changePassword = async (req, res) => {
   try {
-    const { email, oldPassword, newPassword, signature, message } = req.body;
-    const user = await User.findOne({ email });
+    const { myemail, oldPassword, newPassword, signature, message } = req.body;
+    const user = await User.findOne({ email: myemail });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
-    }
-    const key = ec.keyFromPublic(user.publicKey, "hex");
-    const validSignature = key.verify(message, signature);
-    if (!validSignature) {
-      return res.status(401).json({ message: "Invalid signature" });
     }
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Old password does not match" });
     }
+    const key = ec.keyFromPublic(user.publicKey, "hex");
+    const validSignature = key.verify(message, signature);
+
+    if (!validSignature) {
+      user.active = false;
+      await user.save();
+      await sendMail({
+        to: myemail,
+        subject: "YOUR PASSWORD HAS BEEN BREACHED",
+        text: `Someone tried to log into your account with correct email and password but wrong digital certificate thus your account has been deactivated to activate it change your password`,
+      });
+      return res.status(401).json({ message: "Invalid signature" });
+    }
     const hashedPassword = await bcrypt.hash(newPassword, 12);
     user.password = hashedPassword;
     user.passwordChanged = true;
+    user.active = true;
     await user.save();
     res.status(200).json({ message: "Password changed successfully" });
   } catch (error) {
@@ -281,13 +433,12 @@ exports.extract = async (req, res, next) => {
         .status(400)
         .json({ message: "User not found with provided email" });
     }
-    // console.log(user.encKey, user.iv);
     const decryptedKey = decryptdata(encprivateKey, user.encKey, user.iv);
     req.body.privateKey = decryptedKey;
-    // console.log(req.body.privateKey);
     next();
   } catch (error) {
-    return res.status(400).json({ message: "Invalid digital certificate" });
+    req.body.privateKey = "a12";
+    next();
   }
 };
 async function generateCertificatePdf(name, email, encryptedPrivateKey) {
@@ -322,9 +473,93 @@ async function generateCertificatePdf(name, email, encryptedPrivateKey) {
 }
 exports.getTeachers = async (req, res) => {
   try {
+    const user = await User.findOne({ email: req.body.myemail });
+    if (user.role !== "admin") {
+      return res
+        .status(403)
+        .json({ error: "You don't have access to this resource" });
+    }
     const teachers = await User.find({ role: "teacher" });
-    res.status(200).json({ teachers });
+
+    const populatedTeachers = await Promise.all(
+      teachers.map(async (teacher) => {
+        const subjectsTaught = await Subject.find({ teacher: teacher._id });
+        const populatedSubjects = await Promise.all(
+          subjectsTaught.map(async (subject) => {
+            const populatedStudents = await Promise.all(
+              subject.students.map(async (studentId) => {
+                const student = await Student.findById(studentId);
+                const { name, enrollmentNumber } = student.toObject();
+                return { name, enrollmentNumber };
+              })
+            );
+            return { name: subject.name, students: populatedStudents };
+          })
+        );
+        return {
+          name: teacher.name,
+          email: teacher.email,
+          regno: teacher.regno,
+          active: teacher.active,
+          subjectsTaught: populatedSubjects,
+        };
+      })
+    );
+
+    res.status(200).json({ teachers: populatedTeachers });
   } catch (error) {
+    console.log(error);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+exports.getSubjects = async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.myemail });
+    let subjects = [];
+    let subjectsWithPopulatedStudents = [];
+
+    if (user.role === "admin") {
+      subjects = await Subject.find();
+    } else {
+      subjects = await Subject.find({ teacher: user._id });
+    }
+    for (let i = 0; i < subjects.length; i++) {
+      const teacher = await User.findById(subjects[i].teacher);
+      if (teacher) {
+        let students = [];
+        for (let j = 0; j < subjects[i].students.length; j++) {
+          const student = await Student.findById(subjects[i].students[j]);
+          if (student) {
+            const subjectDetails = student.subjects.find(
+              (subject) => String(subject._id) === String(subjects[i]._id)
+            );
+            if (subjectDetails) {
+              students.push({
+                name: student.name,
+                enrollmentNumber: student.enrollmentNumber,
+                attendance: subjectDetails.attendance,
+                totalAttendance: subjectDetails.totalattendance,
+                marks: subjectDetails.marks,
+                totalMarks: subjectDetails.totalmarks,
+              });
+            }
+          }
+        }
+
+        subjectsWithPopulatedStudents.push({
+          name: subjects[i].name,
+          teacher: {
+            regno: teacher.regno,
+            email: teacher.email,
+            name: teacher.name,
+          },
+          students: students,
+        });
+      }
+    }
+
+    res.json({ subjects: subjectsWithPopulatedStudents });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };

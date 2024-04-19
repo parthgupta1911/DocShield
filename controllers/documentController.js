@@ -1,62 +1,85 @@
-const bcrypt = require("bcryptjs");
-const EC = require("elliptic").ec;
-const ec = new EC("secp256k1");
-const User = require("./../models/user"); // Adjust the path according to your project structure
+const User = require("./../models/user");
+const Subject = require("./../models/Subject");
 const Document = require("./../models/document");
-const cryptoUtils = require("./../utils/cryptoUtils"); // Ensure this module is implemented
+const Student = require("./../models/students");
 
 exports.addDocument = async (req, res) => {
   try {
-    const {
-      email,
-      password,
+    const { SubjectId, documentName, documentType, data } = req.body;
+
+    if (!SubjectId) {
+      return res.status(400).json({ error: "SubjectId is required" });
+    }
+
+    const subject = await Subject.findById(SubjectId);
+    const user = await User.findOne({ email: req.body.myemail });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!subject) {
+      return res.status(404).json({ error: "Subject not found" });
+    }
+
+    if (subject.teacher.toString() !== user._id.toString()) {
+      return res.status(400).json({ error: "You do not teach the subject" });
+    }
+
+    if (documentType === "attendance") {
+      if (typeof data !== "object" || data === null) {
+        return res.status(400).json({ error: "Invalid data format" });
+      }
+
+      for (const enno in data) {
+        const status = data[enno];
+        const student = await Student.findOne({ enrollmentNumber: enno });
+
+        if (!student) {
+          continue;
+        }
+        for (let i = 0; i < student.subjects.length; i++) {
+          if (student.subjects[i]._id.toString() == SubjectId) {
+            if (status === "P") {
+              student.subjects[i].attendance += 1;
+            }
+            student.subjects[i].totalattendance += 1;
+          }
+        }
+
+        await student.save();
+      }
+    } else if (documentType === "marks") {
+      for (const enno in data) {
+        const marksData = data[enno];
+        const student = await Student.findOne({ enrollmentNumber: enno });
+        if (!student) {
+          continue;
+        }
+        for (let i = 0; i < student.subjects.length; i++) {
+          if (student.subjects[i]._id.toString() == SubjectId) {
+            student.subjects[i].marks += marksData.marks;
+            student.subjects[i].totalmarks += marksData.totalmarks;
+          }
+        }
+
+        await student.save();
+      }
+    }
+
+    const document = new Document({
+      SubjectId,
       documentName,
-      message,
-      privateKey,
       documentType,
-      signature,
-    } = req.body;
-
-    const teacher = await User.findOne({ email: email });
-    if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found" });
-    }
-
-    if (teacher.role !== "teacher") {
-      return res
-        .status(403)
-        .json({ message: "Access denied. User is not a teacher." });
-    }
-
-    const isMatch = await bcrypt.compare(password, teacher.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Password incorrect" });
-    }
-
-    const key = ec.keyFromPublic(teacher.publicKey, "hex");
-    const validSignature = key.verify(message, signature);
-
-    if (!validSignature) {
-      return res.status(401).json({ message: "Invalid signature" });
-    }
-
-    const encryptedobj = cryptoUtils.encrypt(message, privateKey);
-    const encryptedData = encryptedobj.encryptedData;
-
-    const newDocument = new Document({
-      teacherId: teacher._id,
-      documentName,
-      encryptedData,
-      documentType,
+      data: JSON.stringify(data),
     });
-    await newDocument.save();
 
-    res.status(201).json({
-      message: "Document uploaded successfully",
-      documentId: newDocument._id,
-    });
+    await document.save();
+    res
+      .status(201)
+      .json({ message: "Document created successfully", document });
   } catch (error) {
-    console.error("Error in uploading document:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error(error);
+    res.status(500).json({ message: "Internal server error", error });
   }
 };

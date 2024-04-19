@@ -1,18 +1,17 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-// Define the schema for encrypted documents
 const DocumentSchema = new Schema({
-  teacherId: {
+  SubjectId: {
     type: Schema.Types.ObjectId,
     required: true,
-    ref: "Users",
+    ref: "Subject",
   },
   documentName: {
     type: String,
     required: true,
   },
-  encryptedData: {
+  data: {
     type: String,
     required: true,
   },
