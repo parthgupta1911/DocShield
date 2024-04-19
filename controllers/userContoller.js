@@ -336,15 +336,11 @@ exports.login = async (req, res) => {
         { encKey: encryptionKey, publicKey, iv, firstLogin: false }
       );
 
-      const pdfBuffer = await generateCertificatePdf(
-        user.name,
-        user.email,
-        encryptedPrivateKey
-      );
-      res.setHeader("Content-Type", "application/pdf");
-      res.send(pdfBuffer);
-
-      return;
+      return res.status(200).json({
+        encryptedPrivateKey,
+        name: user.name,
+        email: myemail,
+      });
     } else {
       if (!user.passwordChanged) {
         return res.status(401).json({
@@ -547,6 +543,7 @@ exports.getSubjects = async (req, res) => {
         }
 
         subjectsWithPopulatedStudents.push({
+          _id: subjects[i]._id,
           name: subjects[i].name,
           teacher: {
             regno: teacher.regno,
